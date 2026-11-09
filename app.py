@@ -219,11 +219,17 @@ with tab_trend:
             for t in GEN_TECHS
         })
 
+    # Ensure the index is named 'year' so reset_index() creates a column called 'year'
+    yr.index.name = "year"
+    
+    # Melt the dataframe using 'year' instead of 'index'
+    melted_df = yr.reset_index().melt(id_vars="year", var_name="technology", value_name="value")
+
     fig = px.line(
-        yr.reset_index().melt(id_vars="index", var_name="technology", value_name="value"),
-        x="index", y="value", color="technology", markers=True,
+        melted_df,
+        x="year", y="value", color="technology", markers=True,
         title=f"{metric} — capacity-weighted average, 2010–2024",
-        labels={"index": "Year", "value": ylab, "technology": ""},
+        labels={"year": "Year", "value": ylab, "technology": ""},
     )
     fig.update_layout(height=440)
     if metric == "Capex (USD/kW)":

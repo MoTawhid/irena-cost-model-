@@ -2,6 +2,12 @@
 IRENA-style Renewable Energy Cost Model — Streamlit dashboard.
 Run: streamlit run app.py
 """
+import sys
+import os
+
+# Add the current directory to sys.path so Streamlit Cloud can find local modules
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -22,7 +28,7 @@ from irena_model.data import (
 )
 from irena_model.models import (
     lcoe_table, run_scenarios, tornado, two_way, monte_carlo,
-    project_finance, breakeven_ppa, lcoe_crf, lcoe_components,
+    project_finance, breakeven_ppa, lcoe_crf, lcoe_dcf, lcoe_components,
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -64,20 +70,22 @@ st.sidebar.markdown(
     "2. Cost Trends & Learning\n"
     "3. LCOE Methods\n"
     "4. Scenarios\n"
-    "5. Sensitivity\n"
-    "6. Financial Model"
+    "5. Interactive Drivers\n"
+    "6. Sensitivity (Static)\n"
+    "7. Financial Model"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tabs
 # ─────────────────────────────────────────────────────────────────────────────
-tab_ov, tab_db, tab_trend, tab_lcoe, tab_scen, tab_sens, tab_fin = st.tabs([
+tab_ov, tab_db, tab_trend, tab_lcoe, tab_scen, tab_drivers, tab_sens, tab_fin = st.tabs([
     "📖 Overview",
     "🗄️ Cost Database & QA",
     "📈 Cost Trends & Learning",
     "🧮 LCOE Methods",
     "🔮 Scenarios",
-    "🎯 Sensitivity",
+    "🎛️ Interactive Drivers",
+    "🎯 Sensitivity (Static)",
     "💰 Financial Model",
 ])
 
@@ -110,7 +118,7 @@ with tab_ov:
     st.markdown(
         "| # | Topic | What it does |\n"
         "|---|---|---|\n"
-        "| 1 | **Cost database** | ~1,000 project records, seeded errors, QA pipeline (dupes, missing, units, ranges, MAD outliers), weighted trends, learning curves |\n"
+        "| 1 | **Cost database** | ~1,000 project records, seeded errors, QA pipeline, weighted trends, learning curves |\n"
         "| 2 | **Cost modelling** | 3 LCOE methods side-by-side (CRF, DCF, IDC) + cost components |\n"
         "| 3 | **Scenario tools** | 4 scenarios to 2050 driven by learning-by-deployment + WACC/capex/CF/O&M levers |\n"
         "| 4 | **Sensitivity** | Tornado, two-way grid, 20,000-draw Monte Carlo with Spearman driver ranking |\n"
@@ -219,10 +227,7 @@ with tab_trend:
             for t in GEN_TECHS
         })
 
-    # Ensure the index is named 'year' so reset_index() creates a column called 'year'
     yr.index.name = "year"
-    
-    # Melt the dataframe using 'year' instead of 'index'
     melted_df = yr.reset_index().melt(id_vars="year", var_name="technology", value_name="value")
 
     fig = px.line(
@@ -360,10 +365,75 @@ with tab_scen:
     st.dataframe(lev.round(3), use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 6 — Sensitivity
+# TAB 6 — Interactive LCOE Drivers
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_drivers:
+    st.header("Interactive LCOE Drivers")
+    st.markdown("Adjust the scroll bars below to see how each driver affects the Levelized Cost of Electricity (LCOE). This mimics the core analytical work in cost modelling.")
+    
+    # Default values based on Onshore Wind
+    default_r = a.loc["Onshore Wind"]
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        capex = st.slider("CAPEX (USD/kW)", min_value=200, max_value=5000, value=int(default_r.capex), step=50)
+        cf = st.slider("Capacity Factor (%)", min_value=10.0, max_value=65.0, value=float(default_r.cf * 100), step=1.0) / 100.0
+        
+    with col2:
+        wacc = st.slider("WACC (%)", min_value=1.0, max_value=20.0, value=float(default_r.wacc * 100), step=0.5) / 100.0
+        life = st.slider("Lifetime (Years)", min_value=10, max_value=50, value=int(default_r.life), step=1)
+        
+    with col3:
+        fom = st.slider("Fixed O&M (USD/kW/yr)", min_value=0.0, max_value=200.0, value=float(default_r.fom), step=1.0)
+        var = st.slider("Variable O&M (USD/MWh)", min_value=0.0, max_value=50.0, value=float(default_r['var']), step=0.5)
+    
+    # Calculate LCOE
+    base_lcoe = lcoe_crf(capex, fom, var, cf, wacc, life)
+    components = lcoe_components(capex, fom, var, cf, wacc, life)
+    
+    st.markdown("---")
+    
+    # Key Metrics
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("LCOE-1 (CRF)", f"{base_lcoe:.1f} USD/MWh")
+    m2.metric("Capital Component", f"{components['capital']:.1f} USD/MWh")
+    m3.metric("Fixed O&M Component", f"{components['fixed_om']:.1f} USD/MWh")
+    m4.metric("Variable O&M Component", f"{components['variable']:.1f} USD/MWh")
+    
+    # Charts
+    colA, colB = st.columns(2)
+    
+    with colA:
+        st.subheader("Cost Component Breakdown")
+        fig = go.Figure(go.Bar(
+            x=["Capital", "Fixed O&M", "Variable"],
+            y=[components["capital"], components["fixed_om"], components["variable"]],
+            marker_color=["#1f77b4", "#ff7f0e", "#2ca02c"],
+            text=[f"{v:.1f}" for v in [components["capital"], components["fixed_om"], components["variable"]]],
+            textposition="outside",
+        ))
+        fig.update_layout(yaxis_title="USD/MWh", height=350, showlegend=False)
+        st.plotly_chart(fig, use_container_width=True)
+        
+    with colB:
+        st.subheader("Sensitivity to CAPEX (current LCOE baseline)")
+        capex_range = np.linspace(capex * 0.5, capex * 1.5, 20)
+        lcoe_range = [lcoe_crf(c, fom, var, cf, wacc, life) for c in capex_range]
+        
+        fig = px.line(x=capex_range, y=lcoe_range, labels={"x": "CAPEX (USD/kW)", "y": "LCOE (USD/MWh)"})
+        fig.add_vline(x=capex, line_dash="dash", line_color="red", annotation_text="Current Input")
+        fig.update_layout(height=350)
+        st.plotly_chart(fig, use_container_width=True)
+
+    st.info("💡 **JD Relevance:** Understanding how a 10% change in CAPEX, WACC, or Capacity Factor impacts the final LCOE is critical for evaluating policy incentives and financing mechanisms.")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 7 — Sensitivity (Static)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_sens:
-    st.header("Sensitivity analysis")
+    st.header("Sensitivity analysis (Static)")
+    st.markdown("Based on the baseline assumptions from the cost database.")
 
     tech = st.selectbox("Technology", GEN_TECHS, index=1, key="sens_tech")
     r = a.loc[tech]
@@ -429,7 +499,7 @@ with tab_sens:
     st.caption(f"Top driver: **{m['top_driver']}**")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TAB 7 — Financial Model
+# TAB 8 — Financial Model
 # ─────────────────────────────────────────────────────────────────────────────
 with tab_fin:
     st.header("Project finance model (USD m, real)")

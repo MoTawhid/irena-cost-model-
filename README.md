@@ -1,0 +1,63 @@
+# ⚡ IRENA-Style Renewable Energy Cost Status & Outlook Toolkit
+
+Python + Excel + Streamlit implementation of the analytical workflow in the
+**IRENA Associate Programme Officer (Renewable Energy Cost Status and Outlook)** JD.
+
+> **All data is synthetic** — calibrated to the order of magnitude of published
+> global averages; not official IRENA data.
+
+[![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://share.streamlit.io/)
+
+---
+
+## 🚀 Live Demo
+
+Deploy on Streamlit Cloud with one click → see [Deployment](#-deploy-to-streamlit-cloud) below.
+
+---
+
+## 📋 What it covers
+
+| # | Topic | Python | Excel sheets | Streamlit tab |
+|---|-------|--------|-------------|---------------|
+| 1 | **Cost database** — generate, verify, QA, supply-chain-ready fields, BESS/electrolysers, learning curves | `data.py` | `Cost_DB`, `DB_Enabling`, `QA_Log`, `Cost_Trends`, `Learning_Curves` | 🗄️ & 📈 |
+| 2 | **Cost modelling** — LCOE-1 (CRF), LCOE-2 (DCF+degradation), LCOE-3 (IDC), cost components | `models.py` | `LCOE_Model`, `LCOE_DCF` | 🧮 |
+| 3 | **Scenario tools** — learning-by-deployment, 4 scenarios to 2050 | `models.run_scenarios` | `Scenarios`, `Scen_Calc` | 🔮 |
+| 4 | **Sensitivity** — tornado, two-way grid, 20,000-draw Monte Carlo | `tornado`, `two_way`, `monte_carlo` | `Sensitivity`, `MC_Results` | 🎯 |
+| 5 | **Financial model** — debt, tax, DSCR, IRRs, NPV, break-even PPA | `project_finance`, `breakeven_ppa` | `Fin_Model`, `Fin_Results` | 💰 |
+
+---
+
+## 🧮 Key results (baseline 2024, WACC 7.5%)
+
+| Technology | LCOE (USD/MWh) | Learning rate |
+|------------|---------------:|--------------:|
+| Solar PV | 48.5 | 23% |
+| Onshore Wind | 53.4 | 12% |
+| Offshore Wind | 117.6 | 10% |
+| CSP | 154.2 | 14% |
+| Hydropower | 66.1 | 0 (no learning) |
+| Bioenergy | 77.0 | 0 (no learning) |
+
+- **Scenario spread:** Solar PV falls to ~27.9 USD/MWh by 2050 (Reference); Supply-chain shock is ~28% higher.
+- **Sensitivity:** Capacity factor and capex swing LCOE most; capex is the top Monte-Carlo driver for every technology.
+- **Finance:** Onshore Wind at 15% PPA premium earns ~11% equity IRR, 1.27x min DSCR; break-even PPA for 10% equity IRR is ~59.7 USD/MWh.
+
+---
+
+## 🛠️ Setup (local)
+
+```bash
+git clone https://github.com/<your-username>/irena-cost-model.git
+cd irena-cost-model
+
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+pip install -r requirements.txt
+
+# 1. Launch the Streamlit dashboard
+streamlit run app.py
+
+# 2. (Optional) Rebuild the Excel workbook + CSVs + matplotlib figures
+python run_all.py
